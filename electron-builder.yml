@@ -1,0 +1,12 @@
+appId: com.ghostwrtier.taplokal-cashier
+productName: Taplokal Cashier
+copyright: Copyright © 2024 Ghost Writer
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - from: .
+    filter:
+      - package.json
+      - app
+publish: null
