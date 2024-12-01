@@ -38,7 +38,7 @@ const Page = () => {
     router.push("/category");
   };
 
-  const allTablesOccupied = tableOccupied.length === 25;
+  const allTablesOccupied = tableOccupied.length === 26;
 
   return (
     <div className="py-10 mx-auto container px-40">
@@ -56,6 +56,14 @@ const Page = () => {
             </button>
           ) : (
             <>
+              {allTablesOccupied && (
+                <button
+                  onClick={() => handleTable(0)}
+                  className="p-2 h-40 content-center rounded-xl bg-yellow-500 text-white hover:bg-yellow-600"
+                >
+                  Another table
+                </button>
+              )}
               {Array.from({ length: 25 }, (_, i) =>
                 tableOccupied.some(
                   (table: Table) => table.tableNumber === i + 1
@@ -75,14 +83,6 @@ const Page = () => {
                     {i + 1}
                   </button>
                 )
-              )}
-              {allTablesOccupied && (
-                <button
-                  onClick={() => handleTable(0)}
-                  className="p-2 h-40 content-center rounded-xl bg-yellow-500 text-white hover:bg-yellow-600"
-                >
-                  Standby
-                </button>
               )}
             </>
           )}
