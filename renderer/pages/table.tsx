@@ -38,6 +38,8 @@ const Page = () => {
     router.push("/category");
   };
 
+  const allTablesOccupied = tableOccupied.length === 25;
+
   return (
     <div className="py-10 mx-auto container px-40">
       <div className="text-center">
@@ -53,26 +55,36 @@ const Page = () => {
               <p>Not seated</p>
             </button>
           ) : (
-            Array.from({ length: 25 }, (_, i) =>
-              tableOccupied.some(
-                (table: Table) => table.tableNumber === i + 1
-              ) ? (
-                <p
-                  key={i}
-                  className="p-2 rounded-xl bg-foreground text-white h-40 content-center cursor-not-allowed"
-                >
-                  Occupied
-                </p>
-              ) : (
+            <>
+              {Array.from({ length: 25 }, (_, i) =>
+                tableOccupied.some(
+                  (table: Table) => table.tableNumber === i + 1
+                ) ? (
+                  <p
+                    key={i}
+                    className="p-2 rounded-xl bg-foreground text-white h-40 content-center cursor-not-allowed"
+                  >
+                    Occupied
+                  </p>
+                ) : (
+                  <button
+                    key={i}
+                    onClick={() => handleTable(i + 1)}
+                    className="p-2 h-40 content-center rounded-xl bg-foreground/10 text-foreground hover:bg-foreground hover:text-white"
+                  >
+                    {i + 1}
+                  </button>
+                )
+              )}
+              {allTablesOccupied && (
                 <button
-                  key={i}
-                  onClick={() => handleTable(i + 1)}
-                  className="p-2 h-40 content-center rounded-xl bg-foreground/10 text-foreground hover:bg-foreground hover:text-white"
+                  onClick={() => handleTable(0)}
+                  className="p-2 h-40 content-center rounded-xl bg-yellow-500 text-white hover:bg-yellow-600"
                 >
-                  {i + 1}
+                  Standby
                 </button>
-              )
-            )
+              )}
+            </>
           )}
         </div>
       </div>
