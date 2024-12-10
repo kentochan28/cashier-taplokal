@@ -72,7 +72,7 @@ const Page = () => {
                     key={i}
                     className="p-2 rounded-xl bg-foreground text-white h-40 content-center cursor-not-allowed"
                   >
-                    Occupied
+                    Table {i + 1}: OCCUPIED
                   </p>
                 ) : (
                   <button
@@ -80,7 +80,7 @@ const Page = () => {
                     onClick={() => handleTable(i + 1)}
                     className="p-2 h-40 content-center rounded-xl bg-foreground/10 text-foreground hover:bg-foreground hover:text-white"
                   >
-                    {i + 1}
+                    {`Table ${i + 1}`}
                   </button>
                 )
               )}
