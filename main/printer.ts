@@ -62,8 +62,26 @@ export const setupPrinter = () => {
       ];
     });
 
+    // Calculate the total price
     const total = items
-      .reduce((total, item) => total + item.price * item.quantity, 0)
+      .reduce((total, item) => {
+        const price = item.discountedPrice ? item.discountedPrice : item.price;
+        return total + price * item.quantity;
+      }, 0)
+      .toFixed(2);
+
+    // Calculate VAT
+    const vat = (parseFloat(total) * 0.12).toFixed(2);
+
+    // Calculate subtotal (total minus VAT)
+    const subtotal = (parseFloat(total) - parseFloat(vat)).toFixed(2);
+
+    // Calculate total discount
+    const discount = items
+      .reduce((totalDiscount, item) => {
+        const itemDiscount = item.price * 0.15 * item.quantity;
+        return totalDiscount + itemDiscount;
+      }, 0)
       .toFixed(2);
 
     const data = [
@@ -149,52 +167,18 @@ export const setupPrinter = () => {
           { type: "text", value: "Subtotal", style: { textAlign: "left" } },
         ],
         tableBody: [
-          [
-            {
-              type: "text",
-              value: "",
-            },
-            {
-              type: "text",
-              value: "",
-            },
-            {
-              type: "text",
-              value: "",
-            },
-          ],
           ...products,
-          [
-            {
-              type: "text",
-              value: "",
-            },
-            {
-              type: "text",
-              value: "",
-            },
-            {
-              type: "text",
-              value: "",
-            },
-          ],
           [
             {
               type: "text",
               value: "VAT",
               style: { fontWeight: "bold", textAlign: "right" },
             },
+            { type: "text", value: "", style: {} },
+            { type: "text", value: "", style: {} },
             {
               type: "text",
-              value: "",
-            },
-            {
-              type: "text",
-              value: "",
-            },
-            {
-              type: "text",
-              value: `₱${(total * 0.12).toFixed(2)}`,
+              value: `₱${vat}`,
               style: { fontWeight: "bold", textAlign: "left" },
             },
           ],
@@ -204,19 +188,25 @@ export const setupPrinter = () => {
               value: "Subtotal",
               style: { fontWeight: "bold", textAlign: "right" },
             },
+            { type: "text", value: "", style: {} },
+            { type: "text", value: "", style: {} },
             {
               type: "text",
-              value: "",
+              value: `₱${subtotal}`,
+              style: { fontWeight: "bold", textAlign: "left" },
             },
+          ],
+          [
             {
               type: "text",
-              value: "",
+              value: "Discount",
+              style: { fontWeight: "bold", textAlign: "right" },
             },
+            { type: "text", value: "", style: {} },
+            { type: "text", value: "", style: {} },
             {
               type: "text",
-              value: `₱${(
-                total - parseFloat((total * 0.12).toFixed(2))
-              ).toFixed(2)}`,
+              value: `₱${discount}`,
               style: { fontWeight: "bold", textAlign: "left" },
             },
           ],
@@ -226,14 +216,8 @@ export const setupPrinter = () => {
               value: "Total",
               style: { fontWeight: "bold", textAlign: "right" },
             },
-            {
-              type: "text",
-              value: "",
-            },
-            {
-              type: "text",
-              value: "",
-            },
+            { type: "text", value: "", style: {} },
+            { type: "text", value: "", style: {} },
             {
               type: "text",
               value: `₱${total}`,
@@ -241,10 +225,6 @@ export const setupPrinter = () => {
             },
           ],
         ],
-        tableFooter: [],
-        tableHeaderStyle: { style: { fontWeight: "bold", textAlign: "left" } },
-        tableBodyStyle: {},
-        tableFooterStyle: {},
       },
       {
         type: "divider",
@@ -293,13 +273,10 @@ export const setupPrinter = () => {
     PosPrinter.print(data, options)
       .then(() => {
         console.log("First copy printed");
-
-        // Delay before printing the second copy (5 seconds)
-        return delay(5000); // 5000ms = 5 seconds
+        return delay(5000); // 5-second delay
       })
       .then(() => {
         console.log("Printing second copy...");
-        // Print the second copy after the delay
         return PosPrinter.print(data, options);
       })
       .catch((error) => {

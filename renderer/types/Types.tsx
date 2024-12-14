@@ -17,6 +17,7 @@ export interface ItemCart {
   quantity: number;
   menuItemId: string;
   imageURL: string;
+  discountedPrice?: number;
 }
 
 export interface CartDetails {
