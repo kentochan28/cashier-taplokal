@@ -45,7 +45,7 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
     return items.map((item) => ({
       ...item,
       discountedPrice:
-        discountApplied || !isDiscounted ? item.price : item.price * 0.85,
+        discountApplied || !isDiscounted ? item.price : item.price * 0.8,
     }));
   };
 
