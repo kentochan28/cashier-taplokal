@@ -11,6 +11,7 @@ const handler = {
       dineInOrTakeout: string;
       newOrderNumber: any;
       cashierName: string;
+      totalDiscount: number;
     }
   ) {
     ipcRenderer.send(channel, value);

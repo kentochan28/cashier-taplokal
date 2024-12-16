@@ -13,7 +13,8 @@ const handlePrint = async (
   tableNumber: number,
   dineInOrTakeout: string,
   newOrderNumber: any,
-  cashierName: string
+  cashierName: string,
+  totalDiscount?: number // Add totalDiscount as an optional parameter
 ) => {
   window.ipc.send("print-receipt", {
     items,
@@ -22,6 +23,7 @@ const handlePrint = async (
     dineInOrTakeout,
     newOrderNumber,
     cashierName,
+    totalDiscount,
   });
 };
 

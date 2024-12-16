@@ -16,6 +16,7 @@
     "electron-store": "^8.2.0",
     "firebase": "^10.14.1",
     "lottie-react": "^2.4.0",
+    "prop-types": "^15.8.1",
     "react-hot-toast": "^2.4.1",
     "sharp": "^0.33.5"
   },

@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { CartDetails, ItemCart } from "../types/Types";
+import React, { useState, useEffect, useCallback } from "react";
+import PropTypes from "prop-types";
 import { doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
 import { fs } from "../utils/firebaseConfig";
 import toast from "react-hot-toast";
 import generateTransactionNumber from "../utils/generateTransactionNumber";
 import handlePrint from "../utils/print";
 
-const OrderItem = ({ cart }: { cart: CartDetails }) => {
+const OrderItem = ({ cart }) => {
   const {
     cartId,
     createdAt,
@@ -20,61 +20,82 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
 
   const [isDiscounted, setIsDiscounted] = useState(false);
   const [discountApplied, setDiscountApplied] = useState(false);
-  const [customerName, setCustomerName] = useState<string>("");
+  const [customerName, setCustomerName] = useState("Unknown Customer");
 
-  useEffect(() => {
-    const fetchCustomerName = async () => {
-      try {
-        const customerDoc = await getDoc(doc(fs, "users", customerId));
-        if (customerDoc.exists()) {
-          setCustomerName(customerDoc.data().name || "Unknown Customer");
-        } else {
-          setCustomerName("Unknown Customer");
-        }
-      } catch (error) {
-        console.error("Failed to fetch customer name:", error);
-        setCustomerName("Error fetching name");
+  const fetchCustomerName = useCallback(async () => {
+    try {
+      const customerDoc = await getDoc(doc(fs, "users", customerId));
+      if (customerDoc.exists()) {
+        setCustomerName(customerDoc.data()?.name || "Unknown Customer");
       }
-    };
-
-    fetchCustomerName();
+    } catch (error) {
+      console.error("Failed to fetch customer name:", error);
+      setCustomerName("Error fetching name");
+    }
   }, [customerId]);
 
-  // Calculate discounted price per item, apply discount only if not applied yet
-  const calculateDiscountedItems = () => {
-    return items.map((item) => ({
-      ...item,
-      discountedPrice:
-        discountApplied || !isDiscounted ? item.price : item.price * 0.8,
-    }));
-  };
+  useEffect(() => {
+    fetchCustomerName();
+  }, [fetchCustomerName]);
 
-  // Calculate total discounted price
-  const calculateTotal = (discountedItems: ItemCart[]) => {
-    return discountedItems.reduce(
+  const calculateDiscountedItems = useCallback(() => {
+    return items.map((item) => {
+      const originalPrice = item.price;
+      const discountedPrice =
+        isDiscounted && !discountApplied ? item.price * 0.8 : item.price;
+      const discountAmount =
+        isDiscounted && !discountApplied ? item.price * 0.2 : 0;
+
+      return {
+        ...item,
+        originalPrice,
+        discountedPrice,
+        discountAmount,
+      };
+    });
+  }, [items, isDiscounted, discountApplied]);
+
+  const calculateTotal = useCallback((discountedItems) => {
+    const totalPrice = discountedItems.reduce(
       (acc, item) => acc + item.discountedPrice * item.quantity,
       0
     );
-  };
+    const totalDiscount = discountedItems.reduce(
+      (acc, item) => acc + item.discountAmount * item.quantity,
+      0
+    );
+
+    return { totalPrice, totalDiscount };
+  }, []);
 
   const discountedItems = calculateDiscountedItems();
-  const totalDiscountedPrice = calculateTotal(discountedItems);
+  const { totalPrice: totalDiscountedPrice, totalDiscount } =
+    calculateTotal(discountedItems);
+
+  const updateOrderStatus = async (status, additionalUpdates = {}) => {
+    try {
+      await updateDoc(doc(fs, "checkouts", cartId), {
+        status,
+        ...additionalUpdates,
+      });
+      toast.success(`Order ${status}: ${cartId}`);
+    } catch (error) {
+      toast.error(`Failed to update order status to ${status}.`);
+      console.error(error);
+    }
+  };
 
   const handleApprove = async () => {
     toast.dismiss();
     try {
-      // Update status and items in Firebase
-      await updateDoc(doc(fs, "checkouts", cartId), {
-        status: "approved",
-        items: discountedItems.map((item) => ({
-          ...item,
-          price: item.discountedPrice,
-        })),
-      });
+      const updatedItems = discountedItems.map((item) => ({
+        ...item,
+        price: item.discountedPrice,
+      }));
 
+      await updateOrderStatus("approved", { items: updatedItems });
       setDiscountApplied(true);
 
-      // Notify user
       await updateDoc(doc(fs, "users", customerId), {
         notification: [
           "Checkout Update",
@@ -84,47 +105,33 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
         ],
       });
 
-      // Generate transaction and print
       const transactionNumber = generateTransactionNumber(orderNumber);
       const cashierName = localStorage.getItem("cashier");
       handlePrint(
-        discountedItems,
+        updatedItems,
         transactionNumber,
         tableNumber,
         dineInOrTakeout,
         orderNumber,
-        cashierName
+        cashierName,
+        totalDiscount
       );
-
-      toast.success("Order approved: " + cartId);
     } catch (error) {
       toast.error("Failed to approve order.");
       console.error(error);
     }
   };
 
-  const handleReject = async () => {
+  const handleRejectOrCancel = async (newStatus) => {
     try {
       if (dineInOrTakeout === "dine in" && tableNumber !== 0) {
-        const tableRef = doc(fs, "tables", `table_${tableNumber}`);
-        await setDoc(tableRef, {
-          tableNumber: tableNumber,
+        await setDoc(doc(fs, "tables", `table_${tableNumber}`), {
+          tableNumber,
           status: "unoccupied",
         });
       }
 
-      await updateDoc(doc(fs, "users", customerId), {
-        notification: [
-          "Checkout Update",
-          "Your order has been rejected",
-          "warning",
-          false,
-        ],
-      });
-
-      await updateDoc(doc(fs, "checkouts", cartId), {
-        status: "rejected",
-      });
+      await updateOrderStatus(newStatus);
 
       for (const item of items) {
         const itemRef = doc(fs, "menu", item.menuItemId);
@@ -132,86 +139,32 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
 
         if (itemDoc.exists()) {
           const currentStock = itemDoc.data()?.stock || 0;
-          await updateDoc(itemRef, {
-            stock: currentStock + item.quantity,
-          });
+          await updateDoc(itemRef, { stock: currentStock + item.quantity });
         }
       }
-
-      toast.dismiss();
-      toast.error("Order rejected: " + cartId);
     } catch (error) {
-      toast.error("Failed to reject order.");
+      toast.error(`Failed to ${newStatus} order.`);
       console.error(error);
     }
   };
 
   const handleCompleted = async () => {
     try {
-      await updateDoc(doc(fs, "checkouts", cartId), {
-        status: "completed",
-      });
+      await updateOrderStatus("completed");
 
-      const stockChecks = items.map(async (item) => {
+      const stockUpdates = items.map(async (item) => {
         const itemRef = doc(fs, "menu", item.menuItemId);
         const itemDoc = await getDoc(itemRef);
 
         if (itemDoc.exists()) {
           const currentSold = itemDoc.data()?.sold || 0;
-          await updateDoc(itemRef, {
-            sold: currentSold + item.quantity,
-          });
+          await updateDoc(itemRef, { sold: currentSold + item.quantity });
         }
       });
 
-      await Promise.all(stockChecks);
-
-      toast.dismiss();
-      toast.success("Order completed: " + cartId);
+      await Promise.all(stockUpdates);
     } catch (error) {
       toast.error("Failed to mark order as completed.");
-      console.error(error);
-    }
-  };
-
-  const handleCancel = async () => {
-    try {
-      if (dineInOrTakeout === "dine in" && tableNumber !== 0) {
-        const tableRef = doc(fs, "tables", `table_${tableNumber}`);
-        await setDoc(tableRef, {
-          tableNumber: tableNumber,
-          status: "unoccupied",
-        });
-      }
-
-      await updateDoc(doc(fs, "users", customerId), {
-        notification: [
-          "Checkout Update",
-          "Your order has been cancelled",
-          "error",
-        ],
-      });
-
-      await updateDoc(doc(fs, "checkouts", cartId), {
-        status: "cancelled",
-      });
-
-      for (const item of items) {
-        const itemRef = doc(fs, "menu", item.menuItemId);
-        const itemDoc = await getDoc(itemRef);
-
-        if (itemDoc.exists()) {
-          const currentStock = itemDoc.data()?.stock || 0;
-          await updateDoc(itemRef, {
-            stock: currentStock + item.quantity,
-          });
-        }
-      }
-
-      toast.dismiss();
-      toast.error("Order cancelled: " + cartId);
-    } catch (error) {
-      toast.error("Failed to cancel order.");
       console.error(error);
     }
   };
@@ -222,7 +175,7 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
         <div className="space-y-2">
           <h1 className="text-xs font-semibold">Name: {customerName}</h1>
           <h1 className="text-xs font-semibold">Customer ID: {customerId}</h1>
-          <h2 className="text-sm ">
+          <h2 className="text-sm">
             Order No: <strong>{orderNumber}</strong>
           </h2>
           <h2 className="text-sm">
@@ -250,10 +203,28 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
               <h2 className="text-md font-semibold">{item.name}</h2>
               <h2 className="text-md">{item.quantity}x</h2>
               <h2 className="text-md">
-                ₱{item.discountedPrice.toFixed(2)} (₱{item.price})
+                ₱{item.discountedPrice.toFixed(2)}
+                {isDiscounted && (
+                  <span>(₱{item.originalPrice.toFixed(2)})</span>
+                )}
               </h2>
+              {isDiscounted && (
+                <h2 className="text-md text-green-500">
+                  Saved: ₱{(item.discountAmount * item.quantity).toFixed(2)}
+                </h2>
+              )}
             </div>
           ))}
+          <div className="text-right">
+            {isDiscounted && (
+              <h2 className="text-sm text-green-500">
+                Total Discount: ₱{totalDiscount.toFixed(2)}
+              </h2>
+            )}
+            <h2 className="text-md font-bold">
+              Total: ₱{totalDiscountedPrice.toFixed(2)}
+            </h2>
+          </div>
         </div>
         <div className="space-y-2 text-right">
           <div>
@@ -263,7 +234,7 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
                 checked={isDiscounted}
                 onChange={() => {
                   setIsDiscounted(!isDiscounted);
-                  setDiscountApplied(false); // Reset discount status when checkbox is toggled
+                  setDiscountApplied(false);
                 }}
                 className="mr-2"
               />
@@ -282,7 +253,7 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
                 Approve
               </button>
               <button
-                onClick={handleReject}
+                onClick={() => handleRejectOrCancel("rejected")}
                 className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
               >
                 Reject
@@ -297,7 +268,7 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
                 Complete
               </button>
               <button
-                onClick={handleCancel}
+                onClick={() => handleRejectOrCancel("cancelled")}
                 className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
               >
                 Cancel
@@ -308,6 +279,20 @@ const OrderItem = ({ cart }: { cart: CartDetails }) => {
       </div>
     </div>
   );
+};
+
+OrderItem.propTypes = {
+  cart: PropTypes.shape({
+    cartId: PropTypes.string.isRequired,
+    createdAt: PropTypes.object.isRequired,
+    customerId: PropTypes.string.isRequired,
+    dineInOrTakeout: PropTypes.string.isRequired,
+    items: PropTypes.arrayOf(PropTypes.object).isRequired,
+    orderNumber: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+      .isRequired,
+    status: PropTypes.string.isRequired,
+    tableNumber: PropTypes.number.isRequired,
+  }).isRequired,
 };
 
 export default OrderItem;
